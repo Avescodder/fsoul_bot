@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start"""
+    """Обработчик команды /start - теперь просто приветствие"""
     user_id = update.effective_user.id
     
     with get_db() as db:
@@ -26,20 +26,19 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.add(user)
             db.commit()
     
-    if is_admin():
+    if is_admin(user_id):
         await update.message.reply_text(
-            "👋 Привет, админ! Ты можешь использовать специальные команды:\n\n"
-            "👨‍💼 Команды админа:\n"
+            "👋 Привет! Ты администратор.\n\n"
+            "Доступные команды:\n"
             "/pending - вопросы в ожидании\n"
             "/stats - статистика бота\n"
-            "/answer <ID> <текст> - ответить на вопрос\n\n"
-            "Также ты можешь задавать вопросы как обычный пользователь."
+            "/answer <ID> <текст> - ответить на вопрос"
         )
     else:
         await update.message.reply_text(
-            "👋 Привет! Я бот-помощник по вопросам иммиграции в Португалию.\n\n"
-            "Задай мне любой вопрос, и я постараюсь помочь. "
-            "Если я не смогу ответить сразу, передам вопрос специалисту."
+            "Здравствуйте! Меня зовут Сергей.\n\n"
+            "Я помогаю с вопросами по иммиграции в Португалию. "
+            "Задавайте свои вопросы, и я постараюсь помочь вам максимально подробно."
         )
 
 
@@ -47,36 +46,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help"""
     user_id = update.effective_user.id
     
-    admin_ids = os.getenv("ADMIN_TELEGRAM_IDS", "").split(",")
-    admin_ids = [int(aid.strip()) for aid in admin_ids if aid.strip()]
-    is_admin = user_id in admin_ids
-    
-    if is_admin:
+    if is_admin(user_id):
         await update.message.reply_text(
             "ℹ️ Справка для админа:\n\n"
             "👨‍💼 Команды администратора:\n"
             "/pending - показать вопросы в очереди\n"
             "/stats - статистика работы бота\n"
             "/answer <ID> <текст> - ответить на вопрос\n\n"
-            "👤 Команды пользователя:\n"
-            "/start - начать работу\n"
-            "/help - эта справка\n\n"
             "💡 Как отвечать на вопросы:\n"
             "1. Получаешь уведомление о новом вопросе\n"
             "2. Используешь /answer <ID> <твой ответ>\n"
-            "3. Ответ автоматически отправится пользователю\n"
-            "4. Бот сохранит Q&A в базу знаний и обучится"
+            "3. Ответ автоматически отправится пользователю"
         )
     else:
         await update.message.reply_text(
-            "ℹ️ Как пользоваться ботом:\n\n"
-            "• Просто напиши свой вопрос о иммиграции в Португалию\n"
-            "• Я постараюсь ответить на основе своих знаний\n"
-            "• Если вопрос сложный, я передам его специалисту\n"
-            "• Ты получишь ответ от эксперта\n\n"
-            "Команды:\n"
-            "/start - начать работу\n"
-            "/help - эта справка"
+            "Меня зовут Сергей, я специалист по иммиграции в Португалию.\n\n"
+            "Просто напишите мне свой вопрос, и я постараюсь помочь вам с максимальной детализацией."
         )
 
 
@@ -115,9 +100,11 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.refresh(question)
         
         rag = RAGSystem(llm)
-        answer, confidence, context = await rag.get_answer(db, question_text)
+        answer, confidence, context_data = await rag.get_answer(db, question_text)
         
         threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.7"))
+        
+        print(f"📊 Вопрос: {question_text[:50]}... | Уверенность: {confidence:.2%}")
         
         if confidence >= threshold:
             question.answer_text = answer
@@ -127,11 +114,7 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
             question.answered_at = datetime.utcnow()
             db.commit()
             
-            await update.message.reply_text(
-                f"{answer}\n\n"
-                f"🤖 _Автоматический ответ (уверенность: {confidence:.0%})_",
-                parse_mode="Markdown"
-            )
+            await update.message.reply_text(answer)
             
         else:
             question.confidence_score = confidence
@@ -146,8 +129,9 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.commit()
             
             await update.message.reply_text(
-                "🤔 Сложный вопрос! Я передал его нашим специалистам.\n"
-                "Ожидай ответ в течение нескольких часов."
+                "К сожалению, я не уверен в ответе на ваш вопрос. "
+                "Позвольте мне проконсультироваться с коллегами, "
+                "и я обязательно вернусь к вам с точным ответом в ближайшее время."
             )
             
             await notify_admins(update, context, question.id, user, question_text, confidence)
@@ -167,18 +151,18 @@ async def notify_admins(
     
     message_text = (
         f"❓ Новый вопрос #{question_id}\n\n"
-        f"От: {user.first_name or ''} {user.last_name or ''} "
+        f"👤 От: {user.first_name or ''} {user.last_name or ''} "
         f"(@{user.username or 'без username'})\n"
-        f"ID: {user.telegram_id}\n\n"
-        f"Вопрос:\n{question_text}\n\n"
-        f"🤖 Уверенность AI: {confidence:.0%}\n\n"
-        f"Используй /answer {question_id} <твой ответ> для ответа"
+        f"🆔 Telegram ID: {user.telegram_id}\n\n"
+        f"📝 Вопрос:\n{question_text}\n\n"
+        f"🤖 Уверенность AI: {confidence:.1%}\n\n"
+        f"💬 Используй: /answer {question_id} <твой ответ>"
     )
     
-    bot = context.bot if context else update.get_bot()
+    bot = context.bot if hasattr(context, 'bot') else update.get_bot()
     
     for admin_id in admin_ids:
         try:
             await bot.send_message(chat_id=admin_id, text=message_text)
         except Exception as e:
-            print(f"Не удалось отправить админу {admin_id}: {e}")
+            print(f"⚠️ Не удалось отправить админу {admin_id}: {e}")
