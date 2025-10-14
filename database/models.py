@@ -27,7 +27,7 @@ class Question(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     message_id = Column(BigInteger)
     question_text = Column(Text, nullable=False)
-    question_embedding = Column(Vector(768))  # Размерность эмбеддинга
+    question_embedding = Column(Vector(1536))  # Размерность эмбеддинга
     answer_text = Column(Text)
     confidence_score = Column(Float)
     answered_by_ai = Column(Boolean, default=True)
@@ -45,7 +45,7 @@ class KnowledgeBase(Base):
     id = Column(Integer, primary_key=True)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
-    question_embedding = Column(Vector(768))
+    question_embedding = Column(Vector(1536))
     source = Column(String(255))  # ai, admin, manual
     verified = Column(Boolean, default=False)
     usage_count = Column(Integer, default=0)
