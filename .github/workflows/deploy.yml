@@ -46,9 +46,9 @@ jobs:
             
             cd ${{ secrets.PROJECT_PATH }}
             
-            # Создаем .env из GitHub Secrets
+            # Создаем .env из GitHub Secrets (БЕЗ КАВЫЧЕК В HEREDOC!)
             echo "📝 Создаем .env файл..."
-            cat > .env << 'ENVEOF'
+            cat > .env << ENVEOF
             # Telegram
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             ADMIN_TELEGRAM_IDS=${{ secrets.ADMIN_TELEGRAM_IDS }}
@@ -85,15 +85,19 @@ jobs:
             
             echo "✅ .env file created successfully"
             
+            # DEBUG: Покажи что в .env (без паролей)
+            echo "🔍 .env содержимое (DEBUG):"
+            grep -v "PASSWORD\|TOKEN\|KEY" .env || echo "empty"
+            
             # Бэкап базы данных (если контейнер запущен)
             if [ "$(docker ps -q -f name=immigration_bot)" ]; then
               echo "📦 Creating database backup..."
               docker-compose exec -T db pg_dump -U ${{ secrets.POSTGRES_USER }} ${{ secrets.POSTGRES_DB }} > backup_$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo "⚠️ Backup skipped"
             fi
             
-            # Остановка контейнеров (если они есть)
+            # Остановка контейнеров с удалением volumes
             echo "⏹️ Stopping containers..."
-            docker-compose down || echo "No containers to stop"
+            docker-compose down -v || echo "No containers to stop"
             
             # Создаем директории для данных
             mkdir -p logs backups data
