@@ -18,9 +18,36 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_PORT }}
           script: |
+            # Проверяем существует ли директория проекта
+            if [ ! -d "${{ secrets.PROJECT_PATH }}" ]; then
+              echo "📁 Создаем директорию проекта..."
+              mkdir -p ${{ secrets.PROJECT_PATH }}
+              cd ${{ secrets.PROJECT_PATH }}
+              
+              echo "📥 Первая установка - клонируем репозиторий..."
+              git clone https://github.com/${{ github.repository }}.git .
+            else
+              echo "📂 Директория существует, обновляем..."
+              cd ${{ secrets.PROJECT_PATH }}
+              
+              # Проверяем это ли git репозиторий
+              if [ ! -d ".git" ]; then
+                echo "⚠️ Не git репозиторий, инициализируем..."
+                git init
+                git remote add origin https://github.com/${{ github.repository }}.git
+                git fetch origin
+                git checkout -b main origin/main
+              else
+                echo "📥 Обновляем код..."
+                git fetch origin
+                git reset --hard origin/main
+              fi
+            fi
+            
             cd ${{ secrets.PROJECT_PATH }}
             
             # Создаем .env из GitHub Secrets
+            echo "📝 Создаем .env файл..."
             cat > .env << 'ENVEOF'
             # Telegram
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -64,13 +91,12 @@ jobs:
               docker-compose exec -T db pg_dump -U ${{ secrets.POSTGRES_USER }} ${{ secrets.POSTGRES_DB }} > backup_$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo "⚠️ Backup skipped"
             fi
             
-            # Остановка
+            # Остановка контейнеров (если они есть)
             echo "⏹️ Stopping containers..."
-            docker-compose down
+            docker-compose down || echo "No containers to stop"
             
-            # Обновление кода
-            echo "📥 Pulling latest code..."
-            git pull origin main
+            # Создаем директории для данных
+            mkdir -p logs backups data
             
             # Запуск
             echo "🚀 Starting containers..."
@@ -78,14 +104,14 @@ jobs:
             
             # Ожидание запуска
             echo "⏳ Waiting for services to start..."
-            sleep 15
+            sleep 20
             
             # Проверка
             echo "✅ Checking status..."
             docker-compose ps
             echo ""
             echo "📋 Recent logs:"
-            docker-compose logs --tail=30 bot
+            docker-compose logs --tail=50 bot
             
       - name: Send Telegram notification
         if: always()
