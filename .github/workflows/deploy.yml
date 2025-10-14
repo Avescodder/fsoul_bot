@@ -1,0 +1,102 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  
+
+jobs:
+  deploy:
+    name: Deploy Bot
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          script: |
+            cd ${{ secrets.PROJECT_PATH }}
+            
+            # Создаем .env из GitHub Secrets
+            cat > .env << 'ENVEOF'
+            # Telegram
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            ADMIN_TELEGRAM_IDS=${{ secrets.ADMIN_TELEGRAM_IDS }}
+            
+            # Database
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+            
+            # LLM Provider
+            LLM_PROVIDER=${{ secrets.LLM_PROVIDER }}
+            
+            # OpenAI
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}
+            OPENAI_EMBEDDING_MODEL=${{ secrets.OPENAI_EMBEDDING_MODEL }}
+            
+            # Groq (optional)
+            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
+            GROQ_MODEL=${{ secrets.GROQ_MODEL }}
+            
+            # Claude (optional)
+            CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
+            
+            # Bot settings
+            CONFIDENCE_THRESHOLD=${{ secrets.CONFIDENCE_THRESHOLD }}
+            ENVEOF
+            
+            # Проверка наличия .env
+            if [ ! -f .env ]; then
+              echo "❌ ERROR: Failed to create .env file!"
+              exit 1
+            fi
+            
+            echo "✅ .env file created successfully"
+            
+            # Бэкап базы данных (если контейнер запущен)
+            if [ "$(docker ps -q -f name=immigration_bot)" ]; then
+              echo "📦 Creating database backup..."
+              docker-compose exec -T db pg_dump -U ${{ secrets.POSTGRES_USER }} ${{ secrets.POSTGRES_DB }} > backup_$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo "⚠️ Backup skipped"
+            fi
+            
+            # Остановка
+            echo "⏹️ Stopping containers..."
+            docker-compose down
+            
+            # Обновление кода
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
+            # Запуск
+            echo "🚀 Starting containers..."
+            docker-compose up -d --build
+            
+            # Ожидание запуска
+            echo "⏳ Waiting for services to start..."
+            sleep 15
+            
+            # Проверка
+            echo "✅ Checking status..."
+            docker-compose ps
+            echo ""
+            echo "📋 Recent logs:"
+            docker-compose logs --tail=30 bot
+            
+      - name: Send Telegram notification
+        if: always()
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ${{ job.status == 'success' && '✅' || '❌' }} Деплой ${{ job.status == 'success' && 'успешен' || 'провален' }}!
+            
+            Репозиторий: ${{ github.repository }}
+            Коммит: ${{ github.sha }}
+            Автор: ${{ github.actor }}
+            Ветка: ${{ github.ref_name }}

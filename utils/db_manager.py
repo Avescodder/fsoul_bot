@@ -231,6 +231,5 @@ def main_menu():
 
 
 if __name__ == "__main__":
-    # Инициализация БД
     init_db()
     main_menu()

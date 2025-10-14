@@ -1,35 +1,55 @@
+version: '3.8'
 
 services:
-  postgres:
-    image: ankane/pgvector:latest
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: immigration_bot_db
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: immigration_bot
-      POSTGRES_USER: bot_user
-      POSTGRES_PASSWORD: bot_password
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-botuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-immigration_bot}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - bot_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bot_user -d immigration_bot"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-botuser}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+  bot:
+    build: .
+    container_name: immigration_bot
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS}
+      
+      DATABASE_URL: postgresql://${POSTGRES_USER:-botuser}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-immigration_bot}
+      
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      
+      CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.7}
+    networks:
+      - bot_network
     volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      - ./logs:/app/logs
+
+networks:
+  bot_network:
+    driver: bridge
 
 volumes:
   postgres_data:
-  ollama_data:

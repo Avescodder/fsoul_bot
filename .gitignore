@@ -1,17 +1,9 @@
-# Environment
-.env
-.env.local
-.env.*.local
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -28,7 +20,22 @@ wheels/
 .installed.cfg
 *.egg
 
-# IDEs
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables - КРИТИЧНО!
+.env
+.env.*
+*.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# IDE
 .vscode/
 .idea/
 *.swp
@@ -39,24 +46,49 @@ wheels/
 # Logs
 *.log
 logs/
+*.log.*
 
-# Database exports
+# Database
 *.db
 *.sqlite
-knowledge_base_export.txt
+*.sqlite3
+data/*.db
+backups/*.sql
+
+# Docker
+docker-compose.override.yml
 
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
 
-# Models (если будешь fine-tuning)
-models/
-*.pt
-*.pth
-*.onnx
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# Temporary files
-tmp/
+# Project specific
+data/
+backups/
 temp/
-*.tmp
+tmp/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# PyCharm
+.idea/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/

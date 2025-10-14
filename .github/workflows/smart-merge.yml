@@ -1,0 +1,84 @@
+name: Smart Merge Pipeline
+
+on:
+  push:
+    branches: [ dev ]
+
+jobs:
+  tests:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Check syntax
+        run: |
+          python -m py_compile bot/main.py
+          python -m py_compile bot/handlers/user.py
+          python -m py_compile bot/handlers/admin.py
+          echo "✅ Syntax check passed"
+
+  create-pr:
+    name: Create PR
+    needs: tests
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.create-pr.outputs.pull-request-number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Create Pull Request
+        id: create-pr
+        uses: repo-sync/pull-request@v2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          source_branch: dev
+          destination_branch: main
+          pr_title: "🚀 Deploy: dev → main"
+          pr_body: |
+            ## Готово к деплою
+            
+            ✅ Тесты пройдены
+            📦 Коммит: ${{ github.sha }}
+            👤 Автор: ${{ github.actor }}
+            
+            ### Изменения:
+            ${{ github.event.head_commit.message }}
+            
+            ---
+            **Смержи для автодеплоя на production!**
+          pr_label: "auto-deploy"
+
+  notify:
+    name: Send Notification
+    needs: create-pr
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            ✅ Готово к деплою!
+            
+            dev → main (PR #${{ needs.create-pr.outputs.pr_number }})
+            
+            Смержи PR для деплоя:
+            https://github.com/${{ github.repository }}/pull/${{ needs.create-pr.outputs.pr_number }}
+            
+            Или выполни:
+            git checkout main && git merge dev && git push

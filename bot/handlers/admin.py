@@ -50,7 +50,6 @@ async def answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"⚠️ На вопрос #{question_id} уже ответили")
             return
         
-        # Сохраняем ответ
         question.answer_text = answer_text
         question.answered_by_ai = False
         question.answered_by_admin_id = update.effective_user.id
@@ -58,7 +57,6 @@ async def answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         question.answered_at = datetime.utcnow()
         db.commit()
         
-        # Добавляем в базу знаний
         llm = get_llm()
         rag = RAGSystem(llm)
         await rag.add_to_knowledge_base(
@@ -69,18 +67,16 @@ async def answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             verified=True
         )
         
-        # Удаляем из pending
         db.query(PendingQuestion).filter(
             PendingQuestion.question_id == question_id
         ).delete()
         db.commit()
         
-        # Отправляем ответ пользователю (без упоминания "специалиста" или "админа")
         try:
             bot = context.bot if hasattr(context, 'bot') else update.get_bot()
             await bot.send_message(
                 chat_id=question.user.telegram_id,
-                text=answer_text  # Просто ответ, как будто от того же Сергея
+                text=answer_text  
             )
             
             await update.message.reply_text(
@@ -117,7 +113,6 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message = "📋 *Вопросы в ожидании ответа:*\n\n"
         
         for pending, question, user in pending_questions:
-            # Обрезаем длинные вопросы
             question_preview = question.question_text
             if len(question_preview) > 100:
                 question_preview = question_preview[:97] + "..."
@@ -146,10 +141,10 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with get_db() as db:
         total_questions = db.query(Question).count()
         answered_by_ai = db.query(Question).filter(
-            Question.answered_by_ai == True
+            Question.answered_by_ai
         ).count()
         answered_by_admin = db.query(Question).filter(
-            Question.answered_by_ai == False,
+            not Question.answered_by_ai,
             Question.status == "answered"
         ).count()
         pending = db.query(Question).filter(
@@ -160,7 +155,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from database.models import KnowledgeBase
         kb_size = db.query(KnowledgeBase).count()
         
-        # Вычисляем среднее время ответа для вопросов от админов
         avg_response_time = None
         answered_questions = db.query(Question).filter(
             Question.answered_at.isnot(None),
@@ -172,7 +166,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 (q.answered_at - q.created_at).total_seconds() 
                 for q in answered_questions
             ])
-            avg_response_time = total_time / len(answered_questions) / 3600  # в часах
+            avg_response_time = total_time / len(answered_questions) / 3600 
         
         message = (
             "📊 *Статистика бота:*\n\n"

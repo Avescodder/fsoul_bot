@@ -27,12 +27,12 @@ class Question(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     message_id = Column(BigInteger)
     question_text = Column(Text, nullable=False)
-    question_embedding = Column(Vector(1536))  # Размерность эмбеддинга
+    question_embedding = Column(Vector(1536))  
     answer_text = Column(Text)
     confidence_score = Column(Float)
     answered_by_ai = Column(Boolean, default=True)
     answered_by_admin_id = Column(BigInteger)
-    status = Column(String(50), default="pending")  # pending, answered, escalated
+    status = Column(String(50), default="pending")  
     created_at = Column(DateTime, default=datetime.utcnow)
     answered_at = Column(DateTime)
     
@@ -46,7 +46,7 @@ class KnowledgeBase(Base):
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
     question_embedding = Column(Vector(1536))
-    source = Column(String(255))  # ai, admin, manual
+    source = Column(String(255))
     verified = Column(Boolean, default=False)
     usage_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -60,5 +60,5 @@ class PendingQuestion(Base):
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
     user_telegram_id = Column(BigInteger, nullable=False)
     forwarded_to_admins = Column(Boolean, default=False)
-    admin_message_ids = Column(String(255))  # JSON array of message IDs
+    admin_message_ids = Column(String(255)) 
     created_at = Column(DateTime, default=datetime.utcnow)

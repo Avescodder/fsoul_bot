@@ -1,0 +1,49 @@
+name: Manual Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_branch:
+        description: 'Ветка для мерджа'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - hotfix
+          - feature
+
+jobs:
+  manual-merge:
+    name: Manual Merge & Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+      
+      - name: Merge to main
+        run: |
+          git checkout main
+          git merge --no-ff ${{ inputs.source_branch }} -m "🚀 Manual deploy: ${{ inputs.source_branch }} → main"
+          git push origin main
+      
+      - name: Notify
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🚀 Ручной деплой запущен!
+            
+            ${{ inputs.source_branch }} → main
+            Автор: ${{ github.actor }}
+            
+            Ожидай автоматический деплой...
