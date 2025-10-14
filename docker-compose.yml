@@ -50,22 +50,24 @@ services:
       shadowsocks:
         condition: service_started
     environment:
+
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS}
       
+
       DATABASE_URL: postgresql://${POSTGRES_USER:-botuser}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_USER:-botuser}
       
+
       LLM_PROVIDER: ${LLM_PROVIDER:-openai}
       
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       
+      
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.7}
       
-      HTTP_PROXY: socks5://shadowsocks:1080
-      HTTPS_PROXY: socks5://shadowsocks:1080
-      NO_PROXY: localhost,127.0.0.1,db
+      SHADOWSOCKS_PROXY: socks5://shadowsocks:1080
       
     networks:
       - bot_network

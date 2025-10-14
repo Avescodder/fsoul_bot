@@ -3,6 +3,7 @@ import re
 from typing import List, Tuple
 from bot.llm.base import BaseLLM, LLMResponse
 from openai import AsyncOpenAI
+import httpx
 
 
 class OpenAILLM(BaseLLM):
@@ -11,10 +12,22 @@ class OpenAILLM(BaseLLM):
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
         
-        self.client = AsyncOpenAI(api_key=self.api_key)
+        proxy_url = os.getenv("SHADOWSOCKS_PROXY")
+        http_client = None
+        
+        if proxy_url:
+            print(f"🔐 Using proxy for OpenAI: {proxy_url}")
+            http_client = httpx.AsyncClient(
+                proxy=proxy_url,
+                timeout=30.0
+            )
+        
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            http_client=http_client
+        )
         
         self.model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-        
         self.embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
     
     async def generate_answer(
