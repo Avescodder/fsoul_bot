@@ -46,9 +46,9 @@ jobs:
             
             cd ${{ secrets.PROJECT_PATH }}
             
-            # Создаем .env из GitHub Secrets (БЕЗ КАВЫЧЕК В HEREDOC!)
+            # Создаем .env из GitHub Secrets
             echo "📝 Создаем .env файл..."
-            cat > .env << ENVEOF
+            cat > .env << 'ENVEOF'
             # Telegram
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             ADMIN_TELEGRAM_IDS=${{ secrets.ADMIN_TELEGRAM_IDS }}
@@ -70,9 +70,6 @@ jobs:
             GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
             GROQ_MODEL=${{ secrets.GROQ_MODEL }}
             
-            # Claude (optional)
-            CLAUDE_API_KEY=${{ secrets.CLAUDE_API_KEY }}
-            
             # Bot settings
             CONFIDENCE_THRESHOLD=${{ secrets.CONFIDENCE_THRESHOLD }}
             ENVEOF
@@ -85,36 +82,91 @@ jobs:
             
             echo "✅ .env file created successfully"
             
-            # DEBUG: Покажи что в .env (без паролей)
-            echo "🔍 .env содержимое (DEBUG):"
-            grep -v "PASSWORD\|TOKEN\|KEY" .env || echo "empty"
-            
             # Бэкап базы данных (если контейнер запущен)
-            if [ "$(docker ps -q -f name=immigration_bot)" ]; then
+            if [ "$(docker ps -q -f name=immigration_bot_db)" ]; then
               echo "📦 Creating database backup..."
               docker-compose exec -T db pg_dump -U ${{ secrets.POSTGRES_USER }} ${{ secrets.POSTGRES_DB }} > backup_$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo "⚠️ Backup skipped"
             fi
             
-            # Остановка контейнеров с удалением volumes
+            # Останавливаем контейнеры (БЕЗ удаления volumes!)
             echo "⏹️ Stopping containers..."
-            docker-compose down -v || echo "No containers to stop"
+            docker-compose down || echo "No containers to stop"
             
             # Создаем директории для данных
             mkdir -p logs backups data
             
-            # Запуск
-            echo "🚀 Starting containers..."
+            # Проверяем нужна ли миграция векторов
+            echo "🔍 Checking if migration needed..."
+            NEED_MIGRATION=false
+            
+            # Проверяем существует ли volume с данными
+            if docker volume ls | grep -q "postgres_data"; then
+              echo "📊 Database volume exists, checking vector dimensions..."
+              
+              # Запускаем только БД для проверки
+              docker-compose up -d db
+              sleep 10
+              
+              # Проверяем размерность (если таблица существует)
+              CURRENT_DIM=$(docker-compose exec -T db psql -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }} -t -c "
+                SELECT atttypmod 
+                FROM pg_attribute 
+                WHERE attrelid = 'questions'::regclass 
+                AND attname = 'question_embedding'
+              " 2>/dev/null | tr -d ' ' || echo "0")
+              
+              EXPECTED_DIM=1536
+              if [ "${{ secrets.LLM_PROVIDER }}" != "openai" ]; then
+                EXPECTED_DIM=768
+              fi
+              
+              if [ "$CURRENT_DIM" != "$EXPECTED_DIM" ] && [ "$CURRENT_DIM" != "0" ]; then
+                echo "⚠️ Vector dimension mismatch: current=$CURRENT_DIM, expected=$EXPECTED_DIM"
+                NEED_MIGRATION=true
+              fi
+              
+              docker-compose down
+            fi
+            
+            # Выполняем миграцию если нужно
+            if [ "$NEED_MIGRATION" = true ]; then
+              echo "🔧 Running vector dimension migration..."
+              docker-compose up -d db
+              sleep 10
+              echo "yes" | docker-compose run --rm bot python migrate_vector_dimension.py || echo "⚠️ Migration failed or not needed"
+              docker-compose down
+            fi
+            
+            # Запуск всех сервисов
+            echo "🚀 Starting all services..."
             docker-compose up -d --build
             
             # Ожидание запуска
             echo "⏳ Waiting for services to start..."
-            sleep 20
+            sleep 30
             
-            # Проверка
-            echo "✅ Checking status..."
+            # Проверка Shadowsocks
+            echo "🔍 Checking Shadowsocks..."
+            if docker logs shadowsocks-client 2>&1 | grep -q "listening"; then
+              echo "✅ Shadowsocks is running"
+            else
+              echo "⚠️ Shadowsocks may not be running properly"
+            fi
+            
+            # Проверка бота
+            echo "🔍 Checking bot..."
+            if docker logs immigration_bot 2>&1 | grep -q "Бот запущен"; then
+              echo "✅ Bot is running"
+            else
+              echo "⚠️ Bot may not be running properly"
+            fi
+            
+            # Статус
+            echo "✅ Deployment status:"
             docker-compose ps
+            
             echo ""
-            echo "📋 Recent logs:"
+            echo "📋 Recent bot logs:"
             docker-compose logs --tail=50 bot
             
       - name: Send Telegram notification
@@ -130,3 +182,5 @@ jobs:
             Коммит: ${{ github.sha }}
             Автор: ${{ github.actor }}
             Ветка: ${{ github.ref_name }}
+            
+            ${{ job.status == 'success' && '🔐 Shadowsocks прокси активирован' || '⚠️ Проверь логи на сервере' }}

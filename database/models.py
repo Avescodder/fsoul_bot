@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, Text, ForeignKey, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
@@ -5,6 +6,21 @@ from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
+EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+
+EMBEDDING_DIMENSIONS = {
+    "text-embedding-3-small": 1536,
+    "text-embedding-3-large": 3072,
+    "text-embedding-ada-002": 1536,
+    "local": 768,  
+}
+
+if LLM_PROVIDER == "openai":
+    VECTOR_DIM = EMBEDDING_DIMENSIONS.get(EMBEDDING_MODEL, 1536)
+else:
+    VECTOR_DIM = 768  # Для Groq и других используем локальные эмбеддинги
 
 
 class User(Base):
@@ -27,12 +43,12 @@ class Question(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     message_id = Column(BigInteger)
     question_text = Column(Text, nullable=False)
-    question_embedding = Column(Vector(1536))  
+    question_embedding = Column(Vector(VECTOR_DIM))
     answer_text = Column(Text)
     confidence_score = Column(Float)
     answered_by_ai = Column(Boolean, default=True)
     answered_by_admin_id = Column(BigInteger)
-    status = Column(String(50), default="pending")  
+    status = Column(String(50), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
     answered_at = Column(DateTime)
     
@@ -45,7 +61,7 @@ class KnowledgeBase(Base):
     id = Column(Integer, primary_key=True)
     question = Column(Text, nullable=False)
     answer = Column(Text, nullable=False)
-    question_embedding = Column(Vector(1536))
+    question_embedding = Column(Vector(VECTOR_DIM))
     source = Column(String(255))
     verified = Column(Boolean, default=False)
     usage_count = Column(Integer, default=0)
@@ -60,5 +76,5 @@ class PendingQuestion(Base):
     question_id = Column(Integer, ForeignKey("questions.id"), nullable=False)
     user_telegram_id = Column(BigInteger, nullable=False)
     forwarded_to_admins = Column(Boolean, default=False)
-    admin_message_ids = Column(String(255)) 
+    admin_message_ids = Column(String(255))
     created_at = Column(DateTime, default=datetime.utcnow)

@@ -1,6 +1,27 @@
 version: '3.8'
 
 services:
+  shadowsocks:
+    image: shadowsocks/shadowsocks-libev:latest
+    container_name: shadowsocks-client
+    restart: unless-stopped
+    command: >
+      ss-local
+      -s 82.97.246.158
+      -p 25432
+      -l 1080
+      -k EBZOsyGa1XFmnjHe3BaD0U
+      -m chacha20-ietf-poly1305
+      -b 0.0.0.0
+      -v
+    networks:
+      - bot_network
+    healthcheck:
+      test: ["CMD", "ss-local", "-h"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   db:
     image: pgvector/pgvector:pg16
     container_name: immigration_bot_db
@@ -26,6 +47,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      shadowsocks:
+        condition: service_started
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       ADMIN_TELEGRAM_IDS: ${ADMIN_TELEGRAM_IDS}
@@ -39,10 +62,16 @@ services:
       OPENAI_EMBEDDING_MODEL: ${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
       
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.7}
+      
+      HTTP_PROXY: socks5://shadowsocks:1080
+      HTTPS_PROXY: socks5://shadowsocks:1080
+      NO_PROXY: localhost,127.0.0.1,db
+      
     networks:
       - bot_network
     volumes:
       - ./logs:/app/logs
+      - ./data:/app/data
 
 networks:
   bot_network:
