@@ -65,6 +65,3 @@ httpx[socks]==0.28.1
 psycopg2-binary==2.9.9
 SQLAlchemy==2.0.23
 pgvector==0.4.1
-sentence-transformers==5.1.1
-pydantic==2.5.3
-pgvector==0.4.1
