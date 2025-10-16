@@ -36,7 +36,6 @@ class RAGSystem:
             .limit(self.top_k)
         ).fetchall()
         
-        # Фильтруем по порогу схожести (distance < 0.5 означает схожесть > 50%)
         similar = [(r.question, r.answer) for r in results if r.distance < 0.5]
         
         return similar

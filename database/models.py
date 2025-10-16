@@ -20,7 +20,7 @@ EMBEDDING_DIMENSIONS = {
 if LLM_PROVIDER == "openai":
     VECTOR_DIM = EMBEDDING_DIMENSIONS.get(EMBEDDING_MODEL, 1536)
 else:
-    VECTOR_DIM = 768  # Для Groq и других используем локальные эмбеддинги
+    VECTOR_DIM = 768  
 
 
 class User(Base):

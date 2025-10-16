@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import get_db
 from database.models import User, Question, PendingQuestion
-from utils.rag import RAGSystem
+from utils.improved_rag import ImprovedRAGSystem
 from bot.llm import get_llm
 from bot.handlers.admin import is_admin
 import os
@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start - теперь просто приветствие"""
+    """Обработчик команды /start"""
     user_id = update.effective_user.id
     
     with get_db() as db:
@@ -28,7 +28,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if is_admin(user_id):
         await update.message.reply_text(
-            "👋 Привет! Ты администратор.\n\n"
+            "👋 Привет, администратор!\n\n"
             "Доступные команды:\n"
             "/pending - вопросы в ожидании\n"
             "/stats - статистика бота\n"
@@ -37,8 +37,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text(
             "Здравствуйте! Меня зовут Сергей.\n\n"
-            "Я помогаю с вопросами по иммиграции в Португалию. "
-            "Задавайте свои вопросы, и я постараюсь помочь вам максимально подробно."
+            "Я эксперт по иммиграции в Португалию с более чем 10-летним опытом. "
+            "Помогу вам с визами, ВНЖ, налогообложением и другими вопросами переезда.\n\n"
+            "Задавайте ваши вопросы на русском, английском или португальском языке!"
         )
 
 
@@ -48,27 +49,31 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if is_admin(user_id):
         await update.message.reply_text(
-            "ℹ️ Справка для админа:\n\n"
-            "👨‍💼 Команды администратора:\n"
-            "/pending - показать вопросы в очереди\n"
-            "/stats - статистика работы бота\n"
-            "/answer <ID> <текст> - ответить на вопрос\n\n"
-            "💡 Как отвечать на вопросы:\n"
-            "1. Получаешь уведомление о новом вопросе\n"
-            "2. Используешь /answer <ID> <твой ответ>\n"
-            "3. Ответ автоматически отправится пользователю"
+            "ℹ️ Справка для администратора:\n\n"
+            "👨‍💼 Команды:\n"
+            "/pending - очередь вопросов\n"
+            "/stats - статистика\n"
+            "/answer <ID> <текст> - ответить\n\n"
+            "🤖 Бот автоматически учится на ваших ответах!"
         )
     else:
         await update.message.reply_text(
-            "Меня зовут Сергей, я специалист по иммиграции в Португалию.\n\n"
-            "Просто напишите мне свой вопрос, и я постараюсь помочь вам с максимальной детализацией."
+            "Я помогу вам с:\n\n"
+            "✈️ Визами (D7, Golden Visa, D2)\n"
+            "🏠 ВНЖ и гражданством\n"
+            "💼 Открытием бизнеса\n"
+            "💰 Налогообложением и NHR\n"
+            "📄 Документами и процедурами\n\n"
+            "Просто задайте вопрос на любом языке!"
         )
 
 
 async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик вопросов пользователей"""
+    """Улучшенный обработчик вопросов с контекстом"""
     question_text = update.message.text
     user_tg_id = update.effective_user.id
+    
+    lang = detect_language(question_text)
     
     await update.message.chat.send_action("typing")
     
@@ -99,14 +104,26 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.commit()
         db.refresh(question)
         
-        rag = RAGSystem(llm)
-        answer, confidence, context_data = await rag.get_answer(db, question_text)
+        rag = ImprovedRAGSystem(llm)
+        answer, confidence, context_data = await rag.get_answer(
+            db=db,
+            question=question_text,
+            user_id=user.id,
+            use_web_search=False  
+        )
         
         threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.7"))
         
-        print(f"📊 Вопрос: {question_text[:50]}... | Уверенность: {confidence:.2%}")
+        should_escalate = should_escalate_to_admin(
+            question_text=question_text,
+            confidence=confidence,
+            threshold=threshold,
+            context_available=len(context_data) > 0
+        )
         
-        if confidence >= threshold:
+        print(f"📊 Q: {question_text[:50]}... | Conf: {confidence:.2%} | Escalate: {should_escalate}")
+        
+        if not should_escalate:
             question.answer_text = answer
             question.confidence_score = confidence
             question.answered_by_ai = True
@@ -128,13 +145,67 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
             db.add(pending)
             db.commit()
             
-            await update.message.reply_text(
-                "К сожалению, я не уверен в ответе на ваш вопрос. "
-                "Позвольте мне проконсультироваться с коллегами, "
-                "и я обязательно вернусь к вам с точным ответом в ближайшее время."
-            )
+            escalation_messages = {
+                'ru': "Ваш вопрос требует детального изучения. Я проконсультируюсь с коллегами и вернусь с точным ответом в ближайшее время.",
+                'en': "Your question requires detailed analysis. I'll consult with colleagues and get back to you with a precise answer shortly.",
+                'pt': "Sua pergunta requer análise detalhada. Vou consultar colegas e retornarei com uma resposta precisa em breve."
+            }
+            
+            await update.message.reply_text(escalation_messages.get(lang, escalation_messages['ru']))
             
             await notify_admins(update, context, question.id, user, question_text, confidence)
+
+
+def should_escalate_to_admin(
+    question_text: str,
+    confidence: float,
+    threshold: float,
+    context_available: bool
+) -> bool:
+    """
+    Умная логика эскалации к админу
+    """
+    
+    simple_keywords = [
+        'привет', 'спасибо', 'здравствуй', 'пока', 'благодарю',
+        'hi', 'hello', 'thanks', 'thank you', 'bye',
+        'olá', 'obrigado', 'tchau'
+    ]
+    
+    q_lower = question_text.lower()
+    if any(kw in q_lower for kw in simple_keywords) and len(question_text.split()) < 10:
+        return False
+    
+    if context_available and confidence >= 0.65:
+        return False
+    
+    if confidence >= threshold:
+        return False
+    
+    critical_keywords = [
+        'депортация', 'отказ', 'судебный', 'апелляция',
+        'deportation', 'refusal', 'court', 'appeal',
+        'deportação', 'recusa', 'tribunal'
+    ]
+    
+    if any(kw in q_lower for kw in critical_keywords) and confidence < 0.75:
+        return True
+    
+    return confidence < threshold
+
+
+def detect_language(text: str) -> str:
+    """Простое определение языка вопроса"""
+    text_lower = text.lower()
+    
+    if any(c in 'абвгдежзийклмнопрстуфхцчшщъыьэюя' for c in text_lower):
+        return 'ru'
+    
+    pt_words = ['você', 'não', 'sim', 'obrigado', 'por favor', 'está', 'também', 'quando']
+    if any(word in text_lower for word in pt_words):
+        return 'pt'
+    
+    return 'en'
 
 
 async def notify_admins(
@@ -156,7 +227,7 @@ async def notify_admins(
         f"🆔 Telegram ID: {user.telegram_id}\n\n"
         f"📝 Вопрос:\n{question_text}\n\n"
         f"🤖 Уверенность AI: {confidence:.1%}\n\n"
-        f"💬 Используй: /answer {question_id} <твой ответ>"
+        f"💬 Ответить: /answer {question_id} <текст>"
     )
     
     bot = context.bot if hasattr(context, 'bot') else update.get_bot()
