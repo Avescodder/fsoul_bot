@@ -2,7 +2,6 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import get_db
 from database.models import Question, User, PendingQuestion
-from utils.rag import RAGSystem
 from utils.improved_rag import ImprovedRAGSystemWithTavily
 from bot.llm import get_llm
 import os
