@@ -152,23 +152,31 @@ jobs:
               echo "✅ Shadowsocks is running"
             else
               echo "⚠️ Shadowsocks may not be running properly"
+              docker logs shadowsocks-client --tail=20
             fi
             
-            # Проверка бота
+            # Проверка бота (улучшенная)
             echo "🔍 Checking bot..."
-            if docker logs immigration_bot 2>&1 | grep -q "Бот запущен"; then
-              echo "✅ Bot is running"
+            BOT_LOGS=$(docker logs immigration_bot 2>&1)
+            
+            if echo "$BOT_LOGS" | grep -q "Бот запущен"; then
+              echo "✅ Bot is running successfully"
+            elif echo "$BOT_LOGS" | grep -qi "error\|traceback\|exception"; then
+              echo "❌ Bot has errors:"
+              echo "$BOT_LOGS" | tail -30
             else
-              echo "⚠️ Bot may not be running properly"
+              echo "⚠️ Bot status unclear, showing logs:"
+              echo "$BOT_LOGS" | tail -30
             fi
             
             # Статус
+            echo ""
             echo "✅ Deployment status:"
             docker-compose ps
             
             echo ""
-            echo "📋 Recent bot logs:"
-            docker-compose logs --tail=50 bot
+            echo "📋 Full bot logs:"
+            docker logs immigration_bot --tail=100
             
       - name: Send Telegram notification
         if: always()
