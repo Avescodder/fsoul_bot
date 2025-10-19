@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 from database import get_db
 from database.models import Question, User, PendingQuestion
 from utils.rag import RAGSystem
+from utils.improved_rag import ImprovedRAGSystemWithTavily
 from bot.llm import get_llm
 import os
 from datetime import datetime
@@ -58,7 +59,10 @@ async def answer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.commit()
         
         llm = get_llm()
-        rag = RAGSystem(llm)
+        rag = ImprovedRAGSystemWithTavily(
+            llm=llm,
+            tavily_api_key=os.getenv("TAVILY_API_KEY")
+        )
         await rag.add_to_knowledge_base(
             db,
             question=question.question_text,

@@ -66,6 +66,8 @@ services:
       
       
       CONFIDENCE_THRESHOLD: ${CONFIDENCE_THRESHOLD:-0.7}
+
+      TAVILY_API_KEY: ${TAVILY_API_KEY}
       
       SHADOWSOCKS_PROXY: socks5://shadowsocks:1080
       

@@ -7,6 +7,11 @@ from database import get_db, init_db
 from database.models import User, Question, KnowledgeBase, PendingQuestion
 from bot.llm import get_llm
 from utils.rag import RAGSystem
+from utils.improved_rag import ImprovedRAGSystemWithTavily
+import os
+import dotenv
+
+dotenv.load_dotenv()
 
 
 async def seed_knowledge_base():
@@ -14,7 +19,10 @@ async def seed_knowledge_base():
     print("🌱 Заполняю базу знаний начальными данными...")
     
     llm = get_llm()
-    rag = RAGSystem(llm)
+    rag = ImprovedRAGSystemWithTavily(
+    llm=llm,
+    tavily_api_key=os.getenv("TAVILY_API_KEY")
+    )
     
     initial_knowledge = [
     ("Какие документы нужны для визы D7?",
@@ -230,30 +238,6 @@ def export_knowledge_base(filename: str = "knowledge_base_export.txt"):
         
         print(f"✅ Экспортировано {len(kb_entries)} записей")
 
-
-async def test_rag_search(query: str):
-    """Тестирует RAG поиск"""
-    print(f"\n🔍 Поиск похожих вопросов для: '{query}'")
-    print("=" * 60)
-    
-    llm = get_llm()
-    rag = RAGSystem(llm)
-    
-    with get_db() as db:
-        similar = await rag.search_similar(db, query)
-        
-        if not similar:
-            print("❌ Похожих вопросов не найдено")
-            return
-        
-        print(f"\n✅ Найдено {len(similar)} похожих вопросов:\n")
-        
-        for i, (q, a) in enumerate(similar, 1):
-            print(f"{i}. Вопрос: {q}")
-            print(f"   Ответ: {a[:100]}...")
-            print()
-
-
 def main_menu():
     """Главное меню утилиты"""
     while True:
@@ -278,8 +262,6 @@ def main_menu():
             export_knowledge_base(filename or "knowledge_base_export.txt")
         elif choice == "4":
             query = input("Введи вопрос для поиска: ").strip()
-            if query:
-                asyncio.run(test_rag_search(query))
         elif choice == "5":
             clear_database()
         elif choice == "0":

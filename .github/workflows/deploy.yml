@@ -72,6 +72,7 @@ jobs:
             
             # Bot settings
             CONFIDENCE_THRESHOLD=${{ secrets.CONFIDENCE_THRESHOLD }}
+            TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
             ENVEOF
             
             # Проверка наличия .env

@@ -2,7 +2,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from database import get_db
 from database.models import User, Question, PendingQuestion
-from utils.improved_rag import ImprovedRAGSystem
+from utils.improved_rag import ImprovedRAGSystemWithTavily
 from bot.llm import get_llm
 from bot.handlers.admin import is_admin
 import os
@@ -104,14 +104,18 @@ async def handle_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.commit()
         db.refresh(question)
         
-        rag = ImprovedRAGSystem(llm)
-        answer, confidence, context_data = await rag.get_answer(
+        rag = ImprovedRAGSystemWithTavily(
+        llm=llm,
+        tavily_api_key=os.getenv("TAVILY_API_KEY")
+        )
+        answer, confidence, context_data = await rag.get_answer_with_web_search(
             db=db,
             question=question_text,
             user_id=user.id,
-            use_web_search=False  
+            use_web_search=False,  
+            search_depth="basic"
         )
-        
+                
         threshold = float(os.getenv("CONFIDENCE_THRESHOLD", "0.7"))
         
         should_escalate = should_escalate_to_admin(
