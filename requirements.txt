@@ -39,7 +39,7 @@ pydantic==2.5.0
 pydantic-core==2.14.1
 pydantic-settings==2.1.0
 pygments==2.19.2
-python-dotenv==1.0.0
+python-dotenv==1.1.1
 python-telegram-bot==22.5
 pyyaml==6.0.3
 requests==2.32.5
